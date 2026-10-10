@@ -47,7 +47,13 @@ $Fases = @{
           <Border.Background><ImageBrush x:Name="Img" Stretch="UniformToFill"/></Border.Background>
         </Border>
         <StackPanel Grid.Column="1" Margin="14,0,10,0" VerticalAlignment="Center">
-          <TextBlock Text="LOL AVISO" Foreground="#C8AA6E" FontSize="11" FontWeight="Bold"/>
+          <StackPanel Orientation="Horizontal">
+            <TextBlock Text="LOL AVISO" Foreground="#C8AA6E" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
+            <Border x:Name="Teste" Margin="8,0,0,0" Padding="6,1" CornerRadius="4" Background="#1E2A3F" BorderBrush="#C8AA6E" BorderThickness="1"
+                    Cursor="Hand" ToolTip="Manda um aviso de teste pro celular">
+              <TextBlock x:Name="TesteTxt" Text="TESTE" Foreground="#F0E6D2" FontSize="9" FontWeight="Bold"/>
+            </Border>
+          </StackPanel>
           <TextBlock x:Name="Status" Text="..." Foreground="#F0E6D2" FontSize="17" FontWeight="SemiBold" Margin="0,3,0,3" TextTrimming="CharacterEllipsis"/>
           <TextBlock x:Name="Detalhe" Text="" Foreground="#A09B8C" FontSize="11" TextTrimming="CharacterEllipsis"/>
         </StackPanel>
@@ -127,6 +133,7 @@ function Esta-Ligado {
 }
 
 function Atualizar {
+    if ($script:testeAte -and (Get-Date) -gt $script:testeAte) { $testeTxt.Text = 'TESTE'; $script:testeAte = $null }
     if (-not (Esta-Ligado)) {
         $script:pidVigia = 0
         $botao.Background = $vermelho; $botao.Content = 'OFF'; $bolinha.Fill = $vermelho
@@ -198,6 +205,28 @@ function Mostrar-LinhaTopico {
     else { $linhaTopico.Text = 'Celular: falta configurar  ·  clique aqui' }
 }
 Mostrar-LinhaTopico
+
+# Manda o aviso de teste para o topico salvo; devolve $true se o ntfy aceitou.
+function Enviar-Teste {
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        $corpo = [Text.Encoding]::UTF8.GetBytes('Chegou! Seu celular está ligado ao LoL Aviso.')
+        Invoke-RestMethod -Uri "https://ntfy.sh/$($script:topico)" -Method Post -Body $corpo -TimeoutSec 8 `
+            -Headers @{ Title = 'LoL Aviso - teste'; Tags = 'video_game' } | Out-Null
+        return $true
+    } catch { return $false }
+}
+
+# Botao TESTE do painel: sem topico, abre a caixa de configurar; com topico, envia e mostra o resultado no proprio botao.
+$testeTxt = $win.FindName('TesteTxt')
+$testeAte = $null
+$win.FindName('Teste').Add_MouseLeftButtonDown({
+    $_.Handled = $true
+    $script:ultimoMexer = Get-Date
+    if (-not $script:topico) { Abrir-AjudaCelular; return }
+    if (Enviar-Teste) { $testeTxt.Text = 'ENVIADO' } else { $testeTxt.Text = 'FALHOU' }
+    $script:testeAte = (Get-Date).AddSeconds(3)
+})
 
 [xml]$xamlCelular = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -283,15 +312,8 @@ function Abrir-AjudaCelular {
     $script:dlgCaixa.Text = $script:topico
     $script:dlg.FindName('Testar').Add_Click({
         if (-not (Salvar-Topico)) { return }
-        try {
-            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-            $corpo = [Text.Encoding]::UTF8.GetBytes('Chegou! Seu celular está ligado ao LoL Aviso.')
-            Invoke-RestMethod -Uri "https://ntfy.sh/$($script:topico)" -Method Post -Body $corpo -TimeoutSec 8 `
-                -Headers @{ Title = 'LoL Aviso - teste'; Tags = 'video_game' } | Out-Null
-            $script:dlgResultado.Text = 'Teste enviado. Se não chegou, confira se o nome no app está igual.'
-        } catch {
-            $script:dlgResultado.Text = 'Não consegui enviar o teste. Confira a internet e tente de novo.'
-        }
+        if (Enviar-Teste) { $script:dlgResultado.Text = 'Teste enviado. Se não chegou, confira se o nome no app está igual.' }
+        else { $script:dlgResultado.Text = 'Não consegui enviar o teste. Confira a internet e tente de novo.' }
     })
     $script:dlg.FindName('Depois').Add_Click({ $script:dlg.Close() })
     $script:dlg.FindName('Pronto').Add_Click({ if (Salvar-Topico) { $script:dlg.Close() } })
