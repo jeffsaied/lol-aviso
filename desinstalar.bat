@@ -1,0 +1,3 @@
+@echo off
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-CimInstance Win32_Process -Filter \"Name='powershell.exe'\" | Where-Object { $_.CommandLine -like '*LoL-Aviso*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }; Remove-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'LoL Aviso' -ErrorAction SilentlyContinue; Remove-Item (Join-Path ([Environment]::GetFolderPath('Desktop')) 'LoL Aviso.lnk') -ErrorAction SilentlyContinue; Remove-Item (Join-Path $env:LOCALAPPDATA 'LoL-Aviso') -Recurse -Force -ErrorAction SilentlyContinue; Write-Host 'LoL Aviso removido.'"
+pause

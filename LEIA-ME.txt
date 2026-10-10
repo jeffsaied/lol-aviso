@@ -1,0 +1,30 @@
+LoL Aviso
+=========
+
+O que faz
+- Aceita a partida sozinho quando a fila encontra.
+- No ARAM, se você não escolher a carta a tempo, escolhe uma que você joga bastante.
+- Manda um aviso no celular quando o carregamento termina e o jogo abre.
+
+Como instalar
+1. Extraia a pasta inteira do zip (não rode de dentro do zip).
+2. Dê dois cliques em "instalar.bat".
+3. A janela vai mostrar um nome parecido com  lol-abc123def456.
+   No celular, instale o app "ntfy", toque em + e assine esse nome.
+
+Pronto. Aparece um painel pequeno no canto da tela:
+- Botão verde ON  = ligado.  Um clique desliga (fica vermelho OFF).
+- Arraste pelo fundo para mudar de lugar.
+- O X fecha o programa.
+
+Ele abre sozinho junto com o Windows. Para abrir na mão, use o atalho
+"LoL Aviso" na área de trabalho.
+
+Observações
+- Não passe o nome do tópico para ninguém: quem souber recebe seus avisos.
+- Se o Windows perguntar se quer mesmo executar, é porque o arquivo veio
+  da internet. Confirme.
+- É um programa de terceiros que mexe no cliente do LoL (aceitar e escolher
+  campeão). Use por sua conta.
+
+Para remover: dois cliques em "desinstalar.bat".
