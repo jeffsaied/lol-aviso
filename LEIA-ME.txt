@@ -11,8 +11,10 @@ O que faz
 Como instalar
 1. Extraia a pasta inteira do zip (não rode de dentro do zip).
 2. Dê dois cliques em "instalar.bat".
-3. A janela vai mostrar um nome parecido com  lol-abc123def456.
-   No celular, instale o app "ntfy", toque em + e assine esse nome.
+3. O programa abre com uma caixa mostrando o SEU tópico, um nome parecido
+   com  lol-abc123def456.  No celular, instale o app "ntfy", toque em + e
+   assine esse nome. Clique em "Enviar teste" para conferir e depois em
+   "Já configurei" (até lá a caixa aparece toda vez que o programa abre).
 
 Pronto. Aparece um painel pequeno no canto da tela:
 - Botão verde ON  = ligado.  Um clique desliga (fica vermelho OFF).

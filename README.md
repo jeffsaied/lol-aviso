@@ -14,7 +14,9 @@ Um botão só: verde **ON** está ligado, um clique desliga e ele fica vermelho 
 1. Baixe o **[LoL-Aviso.zip](https://github.com/jeffsaied/lol-aviso/releases/latest/download/LoL-Aviso.zip)**.
 2. Extraia a pasta inteira (não rode de dentro do zip).
 3. Dê dois cliques em `instalar.bat`.
-4. A janela mostra um nome parecido com `lol-abc123def456`. No celular, instale o app **ntfy** (Android ou iPhone), toque em **+** e assine esse nome.
+4. Ao abrir, o programa mostra uma caixa com o **seu tópico** (um nome parecido com `lol-abc123def456`). No celular, instale o app **ntfy** (Android ou iPhone), toque em **+** e assine esse nome. Clique em **Enviar teste** para conferir e depois em **Já configurei**.
+
+A caixa volta a aparecer toda vez que o programa abre, até você clicar em **Já configurei**. Para vê-la de novo, clique na linha do tópico no painel.
 
 O painel aparece no canto da tela e passa a abrir junto com o Windows. Para abrir na mão, use o atalho **LoL Aviso** na área de trabalho.
 
@@ -23,7 +25,7 @@ O painel aparece no canto da tela e passa a abrir junto com o Windows. Para abri
 - Botão redondo: liga e desliga.
 - Arraste pelo fundo para mudar o painel de lugar.
 - **?** mostra ou esconde a lista do que ele faz.
-- Clique na linha do tópico para copiar o nome.
+- Clique na linha do tópico para abrir a caixa de como ligar o celular.
 - **✕** fecha o programa.
 
 ## Bom saber
