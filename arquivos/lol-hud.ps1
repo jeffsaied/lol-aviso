@@ -32,7 +32,10 @@ $Fases = @{
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="LoL Aviso" Width="392" SizeToContent="Height" WindowStyle="None" AllowsTransparency="True"
         Background="Transparent" Topmost="True" ResizeMode="NoResize" WindowStartupLocation="Manual">
-  <Border CornerRadius="14" Background="#0A1428" BorderBrush="#C8AA6E" BorderThickness="1.5" Margin="8">
+  <Grid>
+  <Ellipse x:Name="Bolinha" Width="35" Height="35" Fill="#1FA84A" Stroke="#F0E6D2" StrokeThickness="1.5" Visibility="Collapsed"
+           HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,40,55,6"/>
+  <Border x:Name="Painel" CornerRadius="14" Background="#0A1428" BorderBrush="#C8AA6E" BorderThickness="1.5" Margin="8">
     <Border.Effect><DropShadowEffect BlurRadius="12" ShadowDepth="0" Opacity="0.7"/></Border.Effect>
     <StackPanel>
     <Grid Height="100">
@@ -78,11 +81,12 @@ $Fases = @{
         <TextBlock Text="      (2º monitor, ou minimiza; volta quando o jogo abre)" Foreground="#A09B8C" FontSize="11"/>
         <TextBlock Text="✔  Avisa no celular quando o jogo abre no mapa" Foreground="#F0E6D2" FontSize="12" Margin="0,2"/>
         <TextBlock x:Name="Topico" Text="" Foreground="#A09B8C" FontSize="11" Margin="0,8,0,0" Cursor="Hand"
-                   TextTrimming="CharacterEllipsis" ToolTip="Clique para ver como ligar o celular"/>
+                   TextTrimming="CharacterEllipsis" ToolTip="Clique para configurar o aviso no celular"/>
       </StackPanel>
     </Border>
     </StackPanel>
   </Border>
+  </Grid>
 </Window>
 '@
 
@@ -124,12 +128,12 @@ function Esta-Ligado {
 function Atualizar {
     if (-not (Esta-Ligado)) {
         $script:pidVigia = 0
-        $botao.Background = $vermelho; $botao.Content = 'OFF'
+        $botao.Background = $vermelho; $botao.Content = 'OFF'; $bolinha.Fill = $vermelho
         $status.Text = 'Desligado'
         $detalhe.Text = 'Clique no botão para ligar'
         return
     }
-    $botao.Background = $verde; $botao.Content = 'ON'
+    $botao.Background = $verde; $botao.Content = 'ON'; $bolinha.Fill = $verde
     $fase = ''; $ultimo = ''
     try {
         foreach ($l in @(Get-Content $ArqLog -Tail 40 -Encoding UTF8 -ErrorAction Stop)) {
@@ -148,23 +152,51 @@ $pidVigia = 0
 $ja = @(Achar-Vigias)
 if ($ja.Count -gt 0) { $pidVigia = $ja[0] } else { Ligar }
 
-$botao.Add_Click({ if (Esta-Ligado) { Desligar } else { Ligar }; Atualizar })
+# Parado por 3 s, o painel vira so a bolinha (metade do botao, 25% de opacidade); mexer o mouse em cima abre de novo.
+$painel = $win.FindName('Painel')
+$bolinha = $win.FindName('Bolinha')
+$compacto = $false
+$ultimoMexer = Get-Date
+$ultimaPos = ''
+function Compactar($sim) {
+    if ($sim) { $painel.Visibility = 'Collapsed'; $bolinha.Visibility = 'Visible'; $win.Opacity = 0.25 }
+    else { $bolinha.Visibility = 'Collapsed'; $painel.Visibility = 'Visible'; $win.Opacity = 1 }
+    $script:compacto = $sim
+}
+# Compara a posicao na tela: trocar o painel pela bolinha dispara MouseMove sozinho, sem o mouse ter andado.
+$win.Add_MouseMove({
+    $p = $win.PointToScreen($_.GetPosition($win))
+    $pos = "$([int]$p.X),$([int]$p.Y)"
+    if ($pos -ne $script:ultimaPos) {
+        $script:ultimaPos = $pos
+        $script:ultimoMexer = Get-Date
+        if ($script:compacto) { Compactar $false }
+    }
+})
+$timerParado = New-Object Windows.Threading.DispatcherTimer
+$timerParado.Interval = [TimeSpan]::FromMilliseconds(250)
+$timerParado.Add_Tick({
+    if (-not $script:compacto -and ((Get-Date) - $script:ultimoMexer).TotalSeconds -ge 3) { Compactar $true }
+})
+$timerParado.Start()
+
+$botao.Add_Click({ $script:ultimoMexer = Get-Date; if (Esta-Ligado) { Desligar } else { Ligar }; Atualizar })
 $fechar.Add_MouseLeftButtonDown({ $_.Handled = $true; $win.Close() })
 
 # Painel "o que ele faz": o ? mostra/esconde; a linha do topico copia o nome para colar no app ntfy.
 $info = $win.FindName('Info')
 $linhaTopico = $win.FindName('Topico')
 
-# Cada instalacao tem o seu topico do ntfy; o vigia le o mesmo arquivo.
+# O topico do ntfy e' a pessoa que inventa, na caixa abaixo; o vigia le o mesmo arquivo.
 $ArqTopico = Join-Path $Pasta 'topico.txt'
-$ArqCelularOk = Join-Path $Pasta 'celular-ok.txt'   # existe depois que a pessoa diz que ja configurou
-if (-not (Test-Path $ArqTopico)) {
-    $letras = 'abcdefghijkmnpqrstuvwxyz23456789'.ToCharArray()
-    $sorteio = -join (1..12 | ForEach-Object { $letras | Get-Random })
-    [IO.File]::WriteAllText($ArqTopico, "lol-$sorteio")
+$Exemplo = 'lol-jeffi-exemplo'
+$topico = ''
+if (Test-Path $ArqTopico) { $topico = [IO.File]::ReadAllText($ArqTopico).Trim() }
+function Mostrar-LinhaTopico {
+    if ($script:topico) { $linhaTopico.Text = "Celular: tópico $($script:topico)  ·  alterar" }
+    else { $linhaTopico.Text = 'Celular: falta configurar  ·  clique aqui' }
 }
-$topico = [IO.File]::ReadAllText($ArqTopico).Trim()
-$linhaTopico.Text = "Celular: tópico $topico  ·  como configurar"
+Mostrar-LinhaTopico
 
 [xml]$xamlCelular = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -199,55 +231,69 @@ $linhaTopico.Text = "Celular: tópico $topico  ·  como configurar"
       <TextBlock Text="Ligue o seu celular ao LoL Aviso" Foreground="#F0E6D2" FontSize="18" FontWeight="SemiBold" Margin="0,4,0,6"/>
       <TextBlock Text="Para receber o aviso quando o jogo abrir, faça isto uma vez:" Foreground="#A09B8C" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,12"/>
       <TextBlock Text="1.  Baixe o app ntfy no celular (Android ou iPhone)." Foreground="#F0E6D2" FontSize="13" TextWrapping="Wrap"/>
-      <TextBlock Text="2.  No app, toque em + e assine o seu tópico:" Foreground="#F0E6D2" FontSize="13" TextWrapping="Wrap" Margin="0,10,0,6"/>
-      <Grid Margin="20,0,0,0">
-        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-        <Border Background="#061020" BorderBrush="#26334D" BorderThickness="1" CornerRadius="6" Padding="10,6">
-          <TextBox x:Name="CaixaTopico" IsReadOnly="True" Background="Transparent" BorderThickness="0" Foreground="#F5D76E"
-                   FontFamily="Consolas" FontSize="16" VerticalAlignment="Center"/>
-        </Border>
-        <Button x:Name="Copiar" Grid.Column="1" Content="Copiar" Margin="8,0,0,0"/>
-      </Grid>
-      <TextBlock Text="3.  Clique em Enviar teste e veja se chega no celular." Foreground="#F0E6D2" FontSize="13" TextWrapping="Wrap" Margin="0,12,0,0"/>
-      <TextBlock Text="O tópico é só seu: quem souber o nome recebe os seus avisos." Foreground="#A09B8C" FontSize="11" TextWrapping="Wrap" Margin="0,12,0,0"/>
+      <TextBlock Text="2.  Invente um nome de tópico só seu e escreva aqui:" Foreground="#F0E6D2" FontSize="13" TextWrapping="Wrap" Margin="0,10,0,6"/>
+      <Border Margin="20,0,0,0" Background="#061020" BorderBrush="#C8AA6E" BorderThickness="1" CornerRadius="6" Padding="10,6">
+        <Grid>
+          <TextBlock x:Name="Exemplo" Text="lol-jeffi-exemplo" Foreground="#5B6577" FontFamily="Consolas" FontSize="16"
+                     VerticalAlignment="Center" IsHitTestVisible="False" Margin="2,0,0,0"/>
+          <TextBox x:Name="CaixaTopico" Background="Transparent" BorderThickness="0" Foreground="#F5D76E" CaretBrush="#F5D76E"
+                   FontFamily="Consolas" FontSize="16" VerticalAlignment="Center" MaxLength="64"/>
+        </Grid>
+      </Border>
+      <TextBlock Text="3.  No app, toque em + e assine esse mesmo nome." Foreground="#F0E6D2" FontSize="13" TextWrapping="Wrap" Margin="0,12,0,0"/>
+      <TextBlock Text="4.  Clique em Enviar teste e veja se chega no celular." Foreground="#F0E6D2" FontSize="13" TextWrapping="Wrap" Margin="0,10,0,0"/>
+      <TextBlock Text="Escolha um nome difícil de adivinhar: quem souber o nome recebe os seus avisos." Foreground="#A09B8C" FontSize="11" TextWrapping="Wrap" Margin="0,12,0,0"/>
       <TextBlock x:Name="Resultado" Text="" Foreground="#F5D76E" FontSize="12" TextWrapping="Wrap" Margin="0,8,0,0" MinHeight="16"/>
       <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
         <Button x:Name="Testar" Content="Enviar teste"/>
         <Button x:Name="Depois" Content="Depois" Margin="8,0,0,0"/>
-        <Button x:Name="Pronto" Content="Já configurei" Margin="8,0,0,0" Background="#1FA84A" FontWeight="Bold"/>
+        <Button x:Name="Pronto" Content="Salvar" Margin="8,0,0,0" Background="#1FA84A" FontWeight="Bold"/>
       </StackPanel>
     </StackPanel>
   </Border>
 </Window>
 '@
 
-# Caixa que ensina a ligar o celular. Abre sozinha ate a pessoa clicar em "Ja configurei".
+# Grava o topico digitado na caixa; devolve $false (com o motivo na tela) se o nome nao serve.
+function Salvar-Topico {
+    $novo = $script:dlgCaixa.Text.Trim()
+    if ($novo -eq $Exemplo) { $script:dlgResultado.Text = 'Esse é só o exemplo. Invente um nome seu.'; return $false }
+    if ($novo -notmatch '^[A-Za-z0-9_-]{6,64}$') {
+        $script:dlgResultado.Text = 'Use de 6 a 64 letras, números, - ou _ (sem espaço e sem acento).'
+        return $false
+    }
+    [IO.File]::WriteAllText($ArqTopico, $novo)
+    $script:topico = $novo
+    Mostrar-LinhaTopico
+    return $true
+}
+
+# Caixa que ensina a ligar o celular. Abre sozinha enquanto nao houver topico salvo.
 $dlg = $null
 function Abrir-AjudaCelular {
     if ($script:dlg) { $script:dlg.Activate(); return }
     $script:dlg = [Windows.Markup.XamlReader]::Load((New-Object System.Xml.XmlNodeReader $xamlCelular))
     $script:dlgResultado = $script:dlg.FindName('Resultado')
-    $script:dlg.FindName('CaixaTopico').Text = $topico
-    $script:dlg.FindName('Copiar').Add_Click({
-        [Windows.Clipboard]::SetText($topico)
-        $script:dlgResultado.Text = 'Tópico copiado.'
+    $script:dlgCaixa = $script:dlg.FindName('CaixaTopico')
+    $script:dlgExemplo = $script:dlg.FindName('Exemplo')
+    $script:dlgCaixa.Add_TextChanged({
+        if ($script:dlgCaixa.Text) { $script:dlgExemplo.Visibility = 'Collapsed' } else { $script:dlgExemplo.Visibility = 'Visible' }
     })
+    $script:dlgCaixa.Text = $script:topico
     $script:dlg.FindName('Testar').Add_Click({
+        if (-not (Salvar-Topico)) { return }
         try {
             [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
             $corpo = [Text.Encoding]::UTF8.GetBytes('Chegou! Seu celular está ligado ao LoL Aviso.')
-            Invoke-RestMethod -Uri "https://ntfy.sh/$topico" -Method Post -Body $corpo -TimeoutSec 8 `
+            Invoke-RestMethod -Uri "https://ntfy.sh/$($script:topico)" -Method Post -Body $corpo -TimeoutSec 8 `
                 -Headers @{ Title = 'LoL Aviso - teste'; Tags = 'video_game' } | Out-Null
-            $script:dlgResultado.Text = 'Teste enviado. Se não chegou, confira se o tópico no app está igual.'
+            $script:dlgResultado.Text = 'Teste enviado. Se não chegou, confira se o nome no app está igual.'
         } catch {
             $script:dlgResultado.Text = 'Não consegui enviar o teste. Confira a internet e tente de novo.'
         }
     })
     $script:dlg.FindName('Depois').Add_Click({ $script:dlg.Close() })
-    $script:dlg.FindName('Pronto').Add_Click({
-        try { [IO.File]::WriteAllText($ArqCelularOk, (Get-Date -Format 'yyyy-MM-dd')) } catch {}
-        $script:dlg.Close()
-    })
+    $script:dlg.FindName('Pronto').Add_Click({ if (Salvar-Topico) { $script:dlg.Close() } })
     $script:dlg.Add_MouseLeftButtonDown({ try { $script:dlg.DragMove() } catch {} })
     $script:dlg.Add_Closed({ $script:dlg = $null })
     $script:dlg.Show()
@@ -258,7 +304,7 @@ $win.FindName('Ajuda').Add_MouseLeftButtonDown({
     if ($info.Visibility -eq 'Visible') { $info.Visibility = 'Collapsed' } else { $info.Visibility = 'Visible' }
 })
 $linhaTopico.Add_MouseLeftButtonDown({ $_.Handled = $true; Abrir-AjudaCelular })
-$win.Add_ContentRendered({ if (-not (Test-Path $ArqCelularOk)) { Abrir-AjudaCelular } })
+$win.Add_ContentRendered({ if (-not $script:topico) { Abrir-AjudaCelular } })
 $win.Add_MouseLeftButtonDown({ try { $win.DragMove() } catch {} })
 $win.Add_Closed({ Desligar })
 

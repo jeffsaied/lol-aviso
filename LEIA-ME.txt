@@ -11,10 +11,13 @@ O que faz
 Como instalar
 1. Extraia a pasta inteira do zip (não rode de dentro do zip).
 2. Dê dois cliques em "instalar.bat".
-3. O programa abre com uma caixa mostrando o SEU tópico, um nome parecido
-   com  lol-abc123def456.  No celular, instale o app "ntfy", toque em + e
-   assine esse nome. Clique em "Enviar teste" para conferir e depois em
-   "Já configurei" (até lá a caixa aparece toda vez que o programa abre).
+3. O programa abre com uma caixa para ligar o celular:
+   - instale o app "ntfy" no celular;
+   - invente um nome de tópico só seu (algo como  lol-jeffi-exemplo,
+     mas com o seu nome) e escreva na caixa;
+   - no app, toque em + e assine esse mesmo nome;
+   - clique em "Enviar teste" para conferir e depois em "Salvar".
+   Até você salvar, a caixa aparece toda vez que o programa abre.
 
 Pronto. Aparece um painel pequeno no canto da tela:
 - Botão verde ON  = ligado.  Um clique desliga (fica vermelho OFF).
@@ -25,7 +28,8 @@ Ele abre sozinho junto com o Windows. Para abrir na mão, use o atalho
 "LoL Aviso" na área de trabalho.
 
 Observações
-- Não passe o nome do tópico para ninguém: quem souber recebe seus avisos.
+- Escolha um nome de tópico difícil de adivinhar e não passe para ninguém:
+  quem souber recebe seus avisos.
 - Se o Windows perguntar se quer mesmo executar, é porque o arquivo veio
   da internet. Confirme.
 - É um programa de terceiros que mexe no cliente do LoL (aceitar e escolher

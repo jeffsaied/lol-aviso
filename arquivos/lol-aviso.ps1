@@ -11,14 +11,12 @@ $ModosDeCarta  = @('ARAM', 'KIWI')   # KIWI = ARAM Caos
 $Pasta         = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ArqLog        = Join-Path $Pasta 'lol-aviso.log'
 
-# Cada instalacao tem o seu topico do ntfy (topico.txt); e' o nome que se assina no app do celular.
+# O topico do ntfy e' escolhido pela pessoa no painel e fica em topico.txt; sem ele, nao ha aviso no celular.
 $ArqTopico = Join-Path $Pasta 'topico.txt'
-if (-not (Test-Path $ArqTopico)) {
-    $letras = 'abcdefghijkmnpqrstuvwxyz23456789'.ToCharArray()
-    $sorteio = -join (1..12 | ForEach-Object { $letras | Get-Random })
-    [IO.File]::WriteAllText($ArqTopico, "lol-$sorteio")
+function Ler-Topico {
+    try { if (Test-Path $ArqTopico) { return [IO.File]::ReadAllText($ArqTopico).Trim() } } catch {}
+    return ''
 }
-$Topico = [IO.File]::ReadAllText($ArqTopico).Trim()
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
@@ -63,6 +61,8 @@ function Log($texto) {
 }
 
 function Avisar($titulo, $texto, $prioridade = 'high') {
+    $Topico = Ler-Topico   # lido na hora: a pessoa pode trocar pelo painel com o vigia rodando
+    if (-not $Topico) { Log "sem topico configurado; aviso nao enviado: $titulo"; return }
     try {
         $corpo = [Text.Encoding]::UTF8.GetBytes($texto)
         Invoke-RestMethod -Uri "$Servidor/$Topico" -Method Post -Body $corpo `
@@ -209,7 +209,7 @@ if ($Teste) {
     return
 }
 
-Log "vigiando o LoL. Topico ntfy: $Topico"
+Log 'vigiando o LoL'
 $cliente = $null
 $faseAnterior = ''
 $avisouMapa = $false

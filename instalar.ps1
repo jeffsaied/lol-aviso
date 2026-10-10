@@ -1,7 +1,7 @@
-# Instala o LoL Aviso neste PC: copia os arquivos, cria o topico do celular, o atalho e a entrada de iniciar com o Windows.
+# Instala o LoL Aviso neste PC: copia os arquivos, cria o atalho e a entrada de iniciar com o Windows.
 param(
     [string]$Destino = (Join-Path $env:LOCALAPPDATA 'LoL-Aviso'),
-    [switch]$SoCopiar   # so copia e cria o topico (usado para testar o instalador)
+    [switch]$SoCopiar   # so copia os arquivos (usado para testar o instalador)
 )
 $origem = Split-Path -Parent $MyInvocation.MyCommand.Path
 
@@ -14,15 +14,6 @@ New-Item -ItemType Directory -Force $Destino | Out-Null
 foreach ($f in 'lol-aviso.ps1', 'lol-hud.ps1', 'LoL Aviso.vbs', 'icone.png') {
     Copy-Item (Join-Path $origem "arquivos\$f") $Destino -Force
 }
-
-# Topico proprio de cada pessoa; se ja existe (reinstalacao), mantem.
-$arqTopico = Join-Path $Destino 'topico.txt'
-if (-not (Test-Path $arqTopico)) {
-    $letras = 'abcdefghijkmnpqrstuvwxyz23456789'.ToCharArray()
-    $sorteio = -join (1..12 | ForEach-Object { $letras | Get-Random })
-    [IO.File]::WriteAllText($arqTopico, "lol-$sorteio")
-}
-$topico = [IO.File]::ReadAllText($arqTopico).Trim()
 
 if (-not $SoCopiar) {
     $vbs = Join-Path $Destino 'LoL Aviso.vbs'
@@ -40,15 +31,11 @@ if (-not $SoCopiar) {
 
     Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'LoL Aviso' -Value "`"$wscript`" `"$vbs`""
     Start-Process $wscript -ArgumentList "`"$vbs`""
-    try { Set-Clipboard $topico } catch {}
 }
 
 Write-Host ''
 Write-Host 'LoL Aviso instalado.' -ForegroundColor Green
 Write-Host ''
-Write-Host 'No celular: instale o app "ntfy", toque em + e assine este topico:'
-Write-Host ''
-Write-Host "    $topico" -ForegroundColor Yellow
-Write-Host ''
-Write-Host '(ja foi copiado; e tambem fica guardado em topico.txt na pasta do programa)'
+Write-Host 'O painel vai abrir com uma caixa para ligar o seu celular:'
+Write-Host 'instale o app "ntfy", invente um nome de topico so seu e siga os passos da caixa.'
 Write-Host ''
