@@ -11,7 +11,7 @@ Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" |
     ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 
 New-Item -ItemType Directory -Force $Destino | Out-Null
-foreach ($f in 'lol-aviso.ps1', 'lol-hud.ps1', 'LoL Aviso.vbs', 'icone.png') {
+foreach ($f in 'lol-aviso.ps1', 'lol-hud.ps1', 'LoL Aviso.vbs', 'icone.png', 'icone.ico') {
     Copy-Item (Join-Path $origem "arquivos\$f") $Destino -Force
 }
 
@@ -23,10 +23,7 @@ if (-not $SoCopiar) {
     $atalho.TargetPath = $wscript
     $atalho.Arguments = "`"$vbs`""
     $atalho.WorkingDirectory = $Destino
-    foreach ($d in [IO.DriveInfo]::GetDrives()) {
-        $exe = Join-Path $d.Name 'Riot Games\League of Legends\LeagueClient.exe'
-        if ($d.DriveType -eq 'Fixed' -and (Test-Path $exe)) { $atalho.IconLocation = "$exe,0"; break }
-    }
+    $atalho.IconLocation = "$(Join-Path $Destino 'icone.ico'),0"
     $atalho.Save()
 
     Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'LoL Aviso' -Value "`"$wscript`" `"$vbs`""

@@ -2,6 +2,10 @@
 # Abrir pelo atalho "LoL Aviso" ou pelo LoL Aviso.vbs (sem janela preta).
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 
+# Identidade propria na barra de tarefas: sem isso o Windows junta o painel com o PowerShell e usa o icone dele.
+Add-Type -Namespace LolAviso -Name Shell -MemberDefinition '[DllImport("shell32.dll", CharSet = CharSet.Unicode)] public static extern int SetCurrentProcessExplicitAppUserModelID(string id);'
+[void][LolAviso.Shell]::SetCurrentProcessExplicitAppUserModelID('LoLAviso.Painel')
+
 $Pasta  = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Vigia  = Join-Path $Pasta 'lol-aviso.ps1'
 $ArqLog = Join-Path $Pasta 'lol-aviso.log'
@@ -109,6 +113,7 @@ if (Test-Path $Icone) {
     $bmp = New-Object Windows.Media.Imaging.BitmapImage
     $bmp.BeginInit(); $bmp.CacheOption = 'OnLoad'; $bmp.UriSource = [Uri]$Icone; $bmp.EndInit()
     $win.FindName('Img').ImageSource = $bmp
+    $win.Icon = $bmp
 }
 
 $area = [Windows.SystemParameters]::WorkArea
