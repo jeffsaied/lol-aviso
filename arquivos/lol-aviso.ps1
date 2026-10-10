@@ -61,13 +61,15 @@ function Log($texto) {
 }
 
 # $acoes: botoes do aviso (ate 3, limite do ntfy), no formato de acao do ntfy.
-function Avisar($titulo, $texto, $prioridade = 'high', $acoes = $null) {
+# $seq: avisos com o mesmo $seq trocam o anterior no celular em vez de empilhar.
+function Avisar($titulo, $texto, $prioridade = 'high', $acoes = $null, $seq = '') {
     $Topico = Ler-Topico   # lido na hora: a pessoa pode trocar pelo painel com o vigia rodando
     if (-not $Topico) { Log "sem topico configurado; aviso nao enviado: $titulo"; return }
     try {
         $niveis = @{ urgent = 5; high = 4; default = 3; low = 2 }
         $msg = @{ topic = $Topico; title = $titulo; message = $texto; priority = $niveis[$prioridade]; tags = @('video_game') }
         if ($acoes) { $msg.actions = @($acoes) }
+        if ($seq) { $msg.sequence_id = $seq }
         $corpo = [Text.Encoding]::UTF8.GetBytes(($msg | ConvertTo-Json -Depth 5 -Compress))
         Invoke-RestMethod -Uri $Servidor -Method Post -Body $corpo -ContentType 'application/json' -TimeoutSec 8 | Out-Null
         Log "aviso enviado: $titulo"
@@ -146,32 +148,35 @@ function Pedir-NoCelular($segundos) {
     Avisar 'LoL - escolha o campeão' "$lista`nToque no nome para escolher (faltam $segundos s)." 'urgent' $acoes
 }
 
-# Devolve o id do campeao tocado no celular, ou 0. Cada toque vale uma vez so.
-function Ler-RespostaCelular {
+# Devolve o id do campeao tocado no celular (so se estiver em $validos), ou 0. Cada toque vale uma vez so.
+# Consulta o ntfy no maximo a cada 1,5 s (ele corta quem pergunta demais); entre uma e outra vale o ultimo toque lido,
+# assim as cartas e o banco olham o mesmo toque sem um roubar a vez do outro.
+function Ler-RespostaCelular($validos) {
     $t = Ler-Topico
-    if (-not $t -or -not $script:cartas) { return 0 }
-    try {
-        $r = Invoke-WebRequest -UseBasicParsing -Uri "$Servidor/$t-cmd/json?poll=1&since=20s" -TimeoutSec 3
-        $txt = $r.Content
-        if ($txt -is [byte[]]) { $txt = [Text.Encoding]::UTF8.GetString($txt) }
-        $ultimo = 0; $idMsg = ''
-        foreach ($linha in ($txt -split "`n")) {
-            if (-not $linha.Trim()) { continue }
-            $m = $linha | ConvertFrom-Json
-            if ($m.event -eq 'message' -and $m.message -match '^\d+$') { $ultimo = [int]$m.message; $idMsg = $m.id }
-        }
-        if ($ultimo -and $idMsg -ne $script:ultimaResposta -and $script:cartas -contains $ultimo) {
-            $script:ultimaResposta = $idMsg
-            return $ultimo
-        }
-    } catch {}
+    if (-not $t -or -not $validos) { return 0 }
+    if (((Get-Date) - $script:ultimaConsulta).TotalMilliseconds -ge 1500) {
+        $script:ultimaConsulta = Get-Date
+        try {
+            $r = Invoke-WebRequest -UseBasicParsing -Uri "$Servidor/$t-cmd/json?poll=1&since=20s" -TimeoutSec 3
+            $txt = $r.Content
+            if ($txt -is [byte[]]) { $txt = [Text.Encoding]::UTF8.GetString($txt) }
+            foreach ($linha in ($txt -split "`n")) {
+                if (-not $linha.Trim()) { continue }
+                $m = $linha | ConvertFrom-Json
+                if ($m.event -eq 'message' -and $m.message -match '^\d+$') { $script:toque = [int]$m.message; $script:toqueId = $m.id }
+            }
+        } catch {}
+    }
+    if ($script:toque -and $script:toqueId -ne $script:ultimaResposta -and $validos -contains $script:toque) {
+        $script:ultimaResposta = $script:toqueId
+        return $script:toque
+    }
     return 0
 }
 
 # Roda varias vezes por segundo na selecao: mostra as cartas no celular, obedece o toque de la
 # e, se ninguem escolher e o relogio estiver acabando, escolhe sozinho.
-function Cuidar-DaEscolha {
-    $s = Lcu Get '/lol-champ-select/v1/session'
+function Cuidar-DaEscolha($s) {
     $minha = $null
     foreach ($grupo in $s.actions) {
         foreach ($a in $grupo) {
@@ -194,7 +199,7 @@ function Cuidar-DaEscolha {
         Pedir-NoCelular ([int]($resta / 1000))
     }
 
-    $doCelular = Ler-RespostaCelular
+    $doCelular = Ler-RespostaCelular $script:cartas
     if ($doCelular) { Escolher $minha $doCelular 'pelo celular'; return }
 
     if ($script:escolhaFeita -or $minha.championId -gt 0 -or $resta -gt $SobraParaAgir) { return }
@@ -202,6 +207,37 @@ function Cuidar-DaEscolha {
     if ($script:frequentes -contains $script:cartas[0]) { Escolher $minha $script:cartas[0] 'automático: você joga bastante' }
     else { Escolher $minha ($script:cartas | Get-Random) 'automático: qualquer uma' }
 }
+
+# Banco do ARAM: as cartas que o time nao quis. Cada vez que o banco muda, o aviso do celular e' trocado
+# pela lista nova, com botao para pegar (ate 3, as que voce joga bastante primeiro).
+function Cuidar-DoBanco($s) {
+    if (-not $s.benchEnabled) { return }
+    $banco = @(Ids $s.benchChampions)
+    $banco = @($script:frequentes | Where-Object { $banco -contains $_ }) + @($banco | Where-Object { $script:frequentes -notcontains $_ })
+    $chave = $banco -join ','
+    if ($chave -ne $script:bancoEnviado) {
+        $script:bancoEnviado = $chave
+        $t = Ler-Topico
+        if ($t) {
+            if ($banco) {
+                Log "banco: $(($banco | ForEach-Object { Nome $_ }) -join ', ')"
+                $acoes = @($banco | Select-Object -First 3 | ForEach-Object {
+                    @{ action = 'http'; label = (Nome $_); url = "$Servidor/$t-cmd"; method = 'POST'; body = "$_" }
+                })
+                $lista = ($banco | ForEach-Object { Nome $_ }) -join '  ·  '
+                Avisar 'LoL - sobrando no banco' "$lista`nToque no nome para pegar." 'high' $acoes "banco-$($s.gameId)"
+            } else {
+                Avisar 'LoL - sobrando no banco' 'Banco vazio agora.' 'low' $null "banco-$($s.gameId)"
+            }
+        }
+    }
+    $doCelular = Ler-RespostaCelular $banco
+    if ($doCelular) {
+        Lcu Post "/lol-champ-select/v1/session/bench/swap/$doCelular" | Out-Null
+        Log "peguei $(Nome $doCelular) do banco (pelo celular)"
+    }
+}
+
 # Tira a tela de carregamento da frente: vai para o segundo monitor, ou minimiza se nao der.
 # Tela cheia exclusiva (WindowMode=0 no game.cfg) nao aceita ser movida; so "sem bordas" e "janela".
 function Esconder-Carregamento {
@@ -269,6 +305,10 @@ $cartas = @()
 $nomes = @{}
 $escolhaFeita = $false
 $ultimaResposta = ''
+$ultimaConsulta = [datetime]::MinValue
+$toque = 0
+$toqueId = ''
+$bancoEnviado = ''
 $primeiraVolta = $true
 $telaTratada = $false
 $modoTela = ''
@@ -311,6 +351,7 @@ while ($true) {
         if ($fase -eq 'ChampSelect') {
             $viuEscolha = $false
             $escolhaFeita = $false
+            $bancoEnviado = ''
             $cartas = @()
             $nomes = @{}
             try { foreach ($c in (Lcu Get '/lol-game-data/assets/v1/champion-summary.json')) { $nomes[[int]$c.id] = $c.name } } catch {}
@@ -326,7 +367,11 @@ while ($true) {
     }
     $espera = 1000
     if ($fase -eq 'ChampSelect' -and $modoDeCarta) {
-        try { Cuidar-DaEscolha } catch { Log "falha na escolha: $($_.Exception.Message)" }
+        try {
+            $sessao = Lcu Get '/lol-champ-select/v1/session'
+            Cuidar-DaEscolha $sessao
+            Cuidar-DoBanco $sessao
+        } catch { Log "falha na escolha: $($_.Exception.Message)" }
         if ($viuEscolha) { $espera = 300 }   # responde rapido ao toque no celular
     }
     # Durante o carregamento a porta 2999 nao responde; o evento GameStart so aparece dentro do mapa.

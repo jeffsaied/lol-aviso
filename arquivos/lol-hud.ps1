@@ -86,6 +86,7 @@ $Fases = @{
         <TextBlock Text="O QUE ELE FAZ" Foreground="#C8AA6E" FontSize="10" FontWeight="Bold" Margin="0,0,0,5"/>
         <TextBlock Text="✔  Aceita a partida sozinho quando a fila encontra" Foreground="#F0E6D2" FontSize="12" Margin="0,2"/>
         <TextBlock Text="✔  No ARAM, manda as cartas pro celular com botão de escolher" Foreground="#F0E6D2" FontSize="12" Margin="0,2"/>
+        <TextBlock Text="✔  Mostra no celular o que sobrou no banco, na hora, com botão de pegar" Foreground="#F0E6D2" FontSize="12" Margin="0,2"/>
         <TextBlock Text="✔  Se ninguém escolher a tempo, escolhe sozinho" Foreground="#F0E6D2" FontSize="12" Margin="0,2"/>
         <TextBlock Text="      (pega um campeão que você joga bastante)" Foreground="#A09B8C" FontSize="11"/>
         <TextBlock Text="✔  Tira a tela de carregamento da frente" Foreground="#F0E6D2" FontSize="12" Margin="0,2"/>

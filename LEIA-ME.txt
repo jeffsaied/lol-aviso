@@ -5,6 +5,8 @@ O que faz
 - Aceita a partida sozinho quando a fila encontra.
 - No ARAM, manda as cartas para o celular com o nome de cada campeão e um
   botão para escolher de lá.
+- Mostra no celular, na hora, os campeões que o time deixou no banco, com
+  botão para pegar.
 - Se ninguém escolher a tempo, escolhe sozinho uma que você joga bastante.
 - Tira a tela de carregamento da frente: manda para o segundo monitor (jogo em
   "sem bordas" ou "janela") ou minimiza, e traz o jogo de volta quando ele abre.
