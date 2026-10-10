@@ -1,4 +1,4 @@
-# Vigia do LoL: aceita a partida sozinho, escolhe a carta do ARAM se voce nao escolher
+﻿# Vigia do LoL: aceita a partida sozinho, escolhe a carta do ARAM se voce nao escolher
 # e avisa no celular (ntfy) quando o jogo abre no mapa.
 # Uso:  powershell -ExecutionPolicy Bypass -File lol-aviso.ps1          (fica vigiando)
 #       powershell -ExecutionPolicy Bypass -File lol-aviso.ps1 -Teste   (manda um aviso de teste e sai)
@@ -60,13 +60,16 @@ function Log($texto) {
     try { Add-Content -Path $ArqLog -Value $linha -Encoding UTF8 } catch {}
 }
 
-function Avisar($titulo, $texto, $prioridade = 'high') {
+# $acoes: botoes do aviso (ate 3, limite do ntfy), no formato de acao do ntfy.
+function Avisar($titulo, $texto, $prioridade = 'high', $acoes = $null) {
     $Topico = Ler-Topico   # lido na hora: a pessoa pode trocar pelo painel com o vigia rodando
     if (-not $Topico) { Log "sem topico configurado; aviso nao enviado: $titulo"; return }
     try {
-        $corpo = [Text.Encoding]::UTF8.GetBytes($texto)
-        Invoke-RestMethod -Uri "$Servidor/$Topico" -Method Post -Body $corpo `
-            -Headers @{ Title = $titulo; Priority = $prioridade; Tags = 'video_game' } | Out-Null
+        $niveis = @{ urgent = 5; high = 4; default = 3; low = 2 }
+        $msg = @{ topic = $Topico; title = $titulo; message = $texto; priority = $niveis[$prioridade]; tags = @('video_game') }
+        if ($acoes) { $msg.actions = @($acoes) }
+        $corpo = [Text.Encoding]::UTF8.GetBytes(($msg | ConvertTo-Json -Depth 5 -Compress))
+        Invoke-RestMethod -Uri $Servidor -Method Post -Body $corpo -ContentType 'application/json' -TimeoutSec 8 | Out-Null
         Log "aviso enviado: $titulo"
     } catch {
         Log "falha ao avisar: $($_.Exception.Message)"
@@ -117,7 +120,56 @@ function Ids($lista) {
     return $r | Where-Object { $_ -gt 0 }
 }
 
-# Roda a cada segundo na selecao: se a vez e' sua e o relogio esta acabando, escolhe a carta.
+function Nome($id) {
+    if ($script:nomes.ContainsKey([int]$id)) { return $script:nomes[[int]$id] }
+    return "campeão $id"
+}
+
+# Marca o campeao na sua acao. Nas cartas do ARAM a escolha fica aberta ate o relogio acabar, entao da para trocar depois.
+function Escolher($acao, $id, $motivo) {
+    Lcu Patch "/lol-champ-select/v1/session/actions/$($acao.id)" @{ championId = [int]$id } | Out-Null
+    try { Lcu Post "/lol-champ-select/v1/session/actions/$($acao.id)/complete" | Out-Null } catch {}
+    $script:escolhaFeita = $true
+    Log "escolhi $(Nome $id) ($motivo)"
+}
+
+# Manda as cartas para o celular com um botao para cada (o ntfy aceita ate 3 botoes).
+# O botao publica o id do campeao no topico "<topico>-cmd", que o vigia consulta.
+function Pedir-NoCelular($segundos) {
+    $t = Ler-Topico
+    if (-not $t -or -not $script:cartas) { return }
+    $acoes = @($script:cartas | Select-Object -First 3 | ForEach-Object {
+        @{ action = 'http'; label = (Nome $_); url = "$Servidor/$t-cmd"; method = 'POST'; body = "$_"; clear = $true }
+    })
+    if ($script:cartas.Count -le 6) { $lista = ($script:cartas | ForEach-Object { Nome $_ }) -join '  ·  ' }
+    else { $lista = "$($script:cartas.Count) campeões disponíveis" }
+    Avisar 'LoL - escolha o campeão' "$lista`nToque no nome para escolher (faltam $segundos s)." 'urgent' $acoes
+}
+
+# Devolve o id do campeao tocado no celular, ou 0. Cada toque vale uma vez so.
+function Ler-RespostaCelular {
+    $t = Ler-Topico
+    if (-not $t -or -not $script:cartas) { return 0 }
+    try {
+        $r = Invoke-WebRequest -UseBasicParsing -Uri "$Servidor/$t-cmd/json?poll=1&since=20s" -TimeoutSec 3
+        $txt = $r.Content
+        if ($txt -is [byte[]]) { $txt = [Text.Encoding]::UTF8.GetString($txt) }
+        $ultimo = 0; $idMsg = ''
+        foreach ($linha in ($txt -split "`n")) {
+            if (-not $linha.Trim()) { continue }
+            $m = $linha | ConvertFrom-Json
+            if ($m.event -eq 'message' -and $m.message -match '^\d+$') { $ultimo = [int]$m.message; $idMsg = $m.id }
+        }
+        if ($ultimo -and $idMsg -ne $script:ultimaResposta -and $script:cartas -contains $ultimo) {
+            $script:ultimaResposta = $idMsg
+            return $ultimo
+        }
+    } catch {}
+    return 0
+}
+
+# Roda varias vezes por segundo na selecao: mostra as cartas no celular, obedece o toque de la
+# e, se ninguem escolher e o relogio estiver acabando, escolhe sozinho.
 function Cuidar-DaEscolha {
     $s = Lcu Get '/lol-champ-select/v1/session'
     $minha = $null
@@ -133,26 +185,23 @@ function Cuidar-DaEscolha {
         $script:viuEscolha = $true
         Log "sua vez de escolher (acao $($minha.id)), restam $([int]$resta) ms"
         try { $s | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $Pasta 'ultima-selecao.json') -Encoding UTF8 } catch {}
-    }
-    if ($resta -gt $SobraParaAgir) { return }
-
-    if ($minha.championId -gt 0) {
-        $escolhido = [int]$minha.championId   # voce ja tinha clicado numa carta; so confirma
-        $motivo = 'a que voce marcou'
-    } else {
         $cartas = @()
         try { $cartas = @(Ids (Lcu Get '/lol-lobby-team-builder/champ-select/v1/subset-champion-list')) } catch {}
-        if (-not $cartas) { $cartas = @(Ids (Lcu Get '/lol-champ-select/v1/pickable-champion-ids')) }
-        if (-not $cartas) { Log 'nenhuma carta para escolher'; return }
-        $escolhido = $script:frequentes | Where-Object { $cartas -contains $_ } | Select-Object -First 1
-        if ($escolhido) { $motivo = 'frequente' } else { $escolhido = $cartas | Get-Random; $motivo = 'qualquer uma' }
-        Log "cartas: $($cartas -join ',')"
+        if (-not $cartas) { try { $cartas = @(Ids (Lcu Get '/lol-champ-select/v1/pickable-champion-ids')) } catch {} }
+        # as que voce joga bastante vem primeiro (viram os botoes do celular e a escolha automatica)
+        $script:cartas = @($script:frequentes | Where-Object { $cartas -contains $_ }) + @($cartas | Where-Object { $script:frequentes -notcontains $_ })
+        Log "cartas: $(($script:cartas | ForEach-Object { Nome $_ }) -join ', ')"
+        Pedir-NoCelular ([int]($resta / 1000))
     }
-    Lcu Patch "/lol-champ-select/v1/session/actions/$($minha.id)" @{ championId = $escolhido } | Out-Null
-    Lcu Post "/lol-champ-select/v1/session/actions/$($minha.id)/complete" | Out-Null
-    Log "escolhi o campeao $escolhido ($motivo)"
-}
 
+    $doCelular = Ler-RespostaCelular
+    if ($doCelular) { Escolher $minha $doCelular 'pelo celular'; return }
+
+    if ($script:escolhaFeita -or $minha.championId -gt 0 -or $resta -gt $SobraParaAgir) { return }
+    if (-not $script:cartas) { Log 'nenhuma carta para escolher'; $script:escolhaFeita = $true; return }
+    if ($script:frequentes -contains $script:cartas[0]) { Escolher $minha $script:cartas[0] 'automático: você joga bastante' }
+    else { Escolher $minha ($script:cartas | Get-Random) 'automático: qualquer uma' }
+}
 # Tira a tela de carregamento da frente: vai para o segundo monitor, ou minimiza se nao der.
 # Tela cheia exclusiva (WindowMode=0 no game.cfg) nao aceita ser movida; so "sem bordas" e "janela".
 function Esconder-Carregamento {
@@ -216,6 +265,10 @@ $avisouMapa = $false
 $modoDeCarta = $false
 $viuEscolha = $false
 $frequentes = @()
+$cartas = @()
+$nomes = @{}
+$escolhaFeita = $false
+$ultimaResposta = ''
 $primeiraVolta = $true
 $telaTratada = $false
 $modoTela = ''
@@ -257,6 +310,10 @@ while ($true) {
         }
         if ($fase -eq 'ChampSelect') {
             $viuEscolha = $false
+            $escolhaFeita = $false
+            $cartas = @()
+            $nomes = @{}
+            try { foreach ($c in (Lcu Get '/lol-game-data/assets/v1/champion-summary.json')) { $nomes[[int]$c.id] = $c.name } } catch {}
             $modoDeCarta = $false
             try {
                 $modo = (Lcu Get '/lol-gameflow/v1/session').gameData.queue.gameMode
@@ -267,11 +324,12 @@ while ($true) {
             } catch { Log "falha ao preparar a selecao: $($_.Exception.Message)" }
         }
     }
+    $espera = 1000
     if ($fase -eq 'ChampSelect' -and $modoDeCarta) {
         try { Cuidar-DaEscolha } catch { Log "falha na escolha: $($_.Exception.Message)" }
+        if ($viuEscolha) { $espera = 300 }   # responde rapido ao toque no celular
     }
     # Durante o carregamento a porta 2999 nao responde; o evento GameStart so aparece dentro do mapa.
-    $espera = 1000
     if ($fase -eq 'ChampSelect') {
         $naFrente = [Janela]::GetForegroundWindow()
         if ($naFrente -ne [IntPtr]::Zero) { $ultimaJanela = $naFrente }   # para onde devolver o foco no carregamento

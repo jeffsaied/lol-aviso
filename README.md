@@ -3,7 +3,8 @@
 Painel pequeno para o League of Legends (Windows) que cuida da fila por você.
 
 - **Aceita a partida sozinho** quando a fila encontra.
-- **No ARAM, escolhe a carta** se você não escolher a tempo — pega um campeão que você joga bastante (pela maestria da sua conta); se nenhuma carta for dos seus, pega qualquer uma.
+- **No ARAM, manda as cartas para o celular** com o nome de cada campeão e um botão para escolher de lá.
+- **Se ninguém escolher a tempo, escolhe sozinho** — pega um campeão que você joga bastante (pela maestria da sua conta); se nenhuma carta for dos seus, pega qualquer uma.
 - **Tira a tela de carregamento da frente**: manda para o segundo monitor (jogo em "sem bordas" ou "janela") ou minimiza, e traz o jogo de volta quando ele abre.
 - **Avisa no celular** quando o carregamento termina e o jogo abre no mapa.
 

@@ -3,7 +3,9 @@ LoL Aviso
 
 O que faz
 - Aceita a partida sozinho quando a fila encontra.
-- No ARAM, se você não escolher a carta a tempo, escolhe uma que você joga bastante.
+- No ARAM, manda as cartas para o celular com o nome de cada campeão e um
+  botão para escolher de lá.
+- Se ninguém escolher a tempo, escolhe sozinho uma que você joga bastante.
 - Tira a tela de carregamento da frente: manda para o segundo monitor (jogo em
   "sem bordas" ou "janela") ou minimiza, e traz o jogo de volta quando ele abre.
 - Manda um aviso no celular quando o carregamento termina e o jogo abre.
