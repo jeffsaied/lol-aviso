@@ -74,6 +74,8 @@ $Fases = @{
         <TextBlock Text="✔  Aceita a partida sozinho quando a fila encontra" Foreground="#F0E6D2" FontSize="12" Margin="0,2"/>
         <TextBlock Text="✔  No ARAM, escolhe a carta se você não escolher a tempo" Foreground="#F0E6D2" FontSize="12" Margin="0,2"/>
         <TextBlock Text="      (pega um campeão que você joga bastante)" Foreground="#A09B8C" FontSize="11"/>
+        <TextBlock Text="✔  Tira a tela de carregamento da frente" Foreground="#F0E6D2" FontSize="12" Margin="0,2"/>
+        <TextBlock Text="      (2º monitor, ou minimiza; volta quando o jogo abre)" Foreground="#A09B8C" FontSize="11"/>
         <TextBlock Text="✔  Avisa no celular quando o jogo abre no mapa" Foreground="#F0E6D2" FontSize="12" Margin="0,2"/>
         <TextBlock x:Name="Topico" Text="" Foreground="#A09B8C" FontSize="11" Margin="0,8,0,0" Cursor="Hand"
                    TextTrimming="CharacterEllipsis" ToolTip="Clique para copiar o tópico"/>

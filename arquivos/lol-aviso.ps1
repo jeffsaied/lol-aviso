@@ -34,6 +34,28 @@ public class LcuCertPolicy : ICertificatePolicy {
 "@
 [Net.ServicePointManager]::CertificatePolicy = New-Object LcuCertPolicy
 
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public static class Janela {
+    public struct RECT { public int L, T, R, B; }
+    [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr depois, int x, int y, int cx, int cy, uint flags);
+    [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int cmd);
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] public static extern IntPtr GetShellWindow();
+    [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
+    [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
+    // O Windows so deixa trocar a janela da frente logo depois de uma tecla; um toque no ALT libera.
+    public static void Frente(IntPtr h) {
+        keybd_event(0x12, 0, 0, UIntPtr.Zero); keybd_event(0x12, 0, 2, UIntPtr.Zero);
+        SetForegroundWindow(h);
+    }
+}
+"@
+
 function Log($texto) {
     $linha = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') $texto"
     Write-Host $linha
@@ -72,7 +94,7 @@ function Ler-Cliente {
         $partes = $txt.Split(':')   # LeagueClient:pid:porta:senha:https
         if ($partes.Count -lt 5) { continue }
         $b64 = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("riot:$($partes[3])"))
-        return @{ Porta = $partes[2]; Auth = @{ Authorization = "Basic $b64" } }
+        return @{ Porta = $partes[2]; Auth = @{ Authorization = "Basic $b64" }; Pasta = $pasta }
     }
     return $null
 }
@@ -131,6 +153,57 @@ function Cuidar-DaEscolha {
     Log "escolhi o campeao $escolhido ($motivo)"
 }
 
+# Tira a tela de carregamento da frente: vai para o segundo monitor, ou minimiza se nao der.
+# Tela cheia exclusiva (WindowMode=0 no game.cfg) nao aceita ser movida; so "sem bordas" e "janela".
+function Esconder-Carregamento {
+    $jogo = Get-Process 'League of Legends' -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
+    if (-not $jogo) { return }
+    $h = $jogo.MainWindowHandle
+    $script:janelaJogo = $h
+    $script:telaTratada = $true
+
+    $modoJanela = 0
+    try {
+        $linha = Select-String -Path (Join-Path $cliente.Pasta 'Config\game.cfg') -Pattern '^WindowMode=(\d)' | Select-Object -First 1
+        if ($linha) { $modoJanela = [int]$linha.Matches[0].Groups[1].Value }
+    } catch {}
+    $segunda = [Windows.Forms.Screen]::AllScreens | Where-Object { -not $_.Primary } | Select-Object -First 1
+
+    if ($segunda -and $modoJanela -ne 0) {
+        $r = New-Object Janela+RECT
+        [void][Janela]::GetWindowRect($h, [ref]$r)
+        $script:lugarOriginal = $r
+        $b = $segunda.Bounds
+        $larg = [Math]::Min($r.R - $r.L, $b.Width); $alt = [Math]::Min($r.B - $r.T, $b.Height)
+        [void][Janela]::SetWindowPos($h, [IntPtr]::Zero, $b.X, $b.Y, $larg, $alt, 0x0014)   # sem mexer na ordem nem ativar
+        $volta = $script:ultimaJanela
+        if (-not $volta -or -not [Janela]::IsWindowVisible($volta)) { $volta = [Janela]::GetShellWindow() }
+        [Janela]::Frente($volta)
+        $script:modoTela = 'movida'
+        Log "carregamento enviado para o segundo monitor ($($segunda.DeviceName))"
+    } else {
+        [void][Janela]::ShowWindow($h, 6)   # minimiza e devolve o foco para a janela de antes
+        $script:modoTela = 'minimizada'
+        if ($segunda) { Log 'carregamento minimizado (jogo em tela cheia exclusiva nao pode ser movido)' }
+        else { Log 'carregamento minimizado (sem segundo monitor)' }
+    }
+}
+
+# O jogo abriu no mapa: devolve a janela para o lugar e para a frente.
+function Voltar-Jogo {
+    if (-not $script:modoTela) { return }
+    $h = $script:janelaJogo
+    if ($script:modoTela -eq 'movida') {
+        $r = $script:lugarOriginal
+        [void][Janela]::SetWindowPos($h, [IntPtr]::Zero, $r.L, $r.T, $r.R - $r.L, $r.B - $r.T, 0x0014)
+    } else {
+        [void][Janela]::ShowWindow($h, 9)
+    }
+    [Janela]::Frente($h)
+    Log 'jogo de volta na tela principal'
+    $script:modoTela = ''
+}
+
 if ($Teste) {
     Avisar 'LoL - teste' 'Se isso chegou no celular, esta funcionando.'
     return
@@ -143,6 +216,12 @@ $avisouMapa = $false
 $modoDeCarta = $false
 $viuEscolha = $false
 $frequentes = @()
+$primeiraVolta = $true
+$telaTratada = $false
+$modoTela = ''
+$janelaJogo = [IntPtr]::Zero
+$ultimaJanela = [IntPtr]::Zero
+$lugarOriginal = $null
 while ($true) {
     if (-not $cliente) {
         $cliente = Ler-Cliente
@@ -161,8 +240,12 @@ while ($true) {
     }
     if ($fase -ne $faseAnterior) {
         Log "fase: $fase"
+        # Vigia ligado no meio de uma partida: nao mexe na janela nem avisa de novo.
+        $avisouMapa = ($primeiraVolta -and $fase -eq 'InProgress')
+        $primeiraVolta = $false
         $faseAnterior = $fase
-        $avisouMapa = $false
+        $telaTratada = $false
+        $modoTela = ''
         if ($fase -eq 'ReadyCheck') {
             try {
                 Lcu Post '/lol-matchmaking/v1/ready-check/accept' | Out-Null
@@ -188,14 +271,25 @@ while ($true) {
         try { Cuidar-DaEscolha } catch { Log "falha na escolha: $($_.Exception.Message)" }
     }
     # Durante o carregamento a porta 2999 nao responde; o evento GameStart so aparece dentro do mapa.
+    $espera = 1000
+    if ($fase -eq 'ChampSelect') {
+        $naFrente = [Janela]::GetForegroundWindow()
+        if ($naFrente -ne [IntPtr]::Zero) { $ultimaJanela = $naFrente }   # para onde devolver o foco no carregamento
+    }
     if ($fase -eq 'InProgress' -and -not $avisouMapa) {
+        $espera = 300   # a janela do jogo aparece de repente; olha mais vezes para tirar da frente logo
+        $carregando = $false
         try {
             $ev = Invoke-RestMethod -Uri 'https://127.0.0.1:2999/liveclientdata/eventdata' -TimeoutSec 2
             if ($ev.Events | Where-Object { $_.EventName -eq 'GameStart' }) {
+                try { Voltar-Jogo } catch { Log "falha ao voltar o jogo: $($_.Exception.Message)" }
                 Avisar 'LoL - dentro do mapa' 'Carregamento terminou, o jogo abriu.' 'urgent'
                 $avisouMapa = $true
             }
-        } catch {}
+        } catch { $carregando = $true }
+        if ($carregando -and -not $telaTratada) {
+            try { Esconder-Carregamento } catch { Log "falha ao esconder o carregamento: $($_.Exception.Message)" }
+        }
     }
-    Start-Sleep -Seconds 1
+    Start-Sleep -Milliseconds $espera
 }

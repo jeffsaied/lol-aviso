@@ -4,6 +4,8 @@ LoL Aviso
 O que faz
 - Aceita a partida sozinho quando a fila encontra.
 - No ARAM, se você não escolher a carta a tempo, escolhe uma que você joga bastante.
+- Tira a tela de carregamento da frente: manda para o segundo monitor (jogo em
+  "sem bordas" ou "janela") ou minimiza, e traz o jogo de volta quando ele abre.
 - Manda um aviso no celular quando o carregamento termina e o jogo abre.
 
 Como instalar
